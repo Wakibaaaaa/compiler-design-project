@@ -15,6 +15,20 @@ def home():
     return app.send_static_file("index.html")
 
 
+@app.route("/debug-files")
+def debug_files():
+    import os
+    try:
+        files = os.listdir(app.static_folder)
+    except Exception as e:
+        files = [f"ERROR: {e}"]
+    return jsonify({
+        "static_folder_path": app.static_folder,
+        "files_found": files,
+        "cwd": os.getcwd(),
+    })
+
+
 @app.route("/api/ping", methods=["GET"])
 def ping():
     return jsonify({"message": "Backend is alive!"})
