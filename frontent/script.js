@@ -1,7 +1,10 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const API_BASE = "http://127.0.0.1:5000";
+// Empty string = "call this same server" -- works both locally (single
+// Flask server now serves the frontend too) and once deployed online,
+// with no URL to remember to change.
+const API_BASE = "";
 
 const PHASE_EXPLANATIONS = {
   lexical: "Converts the raw source text into a stream of tokens and classifies each one into its own table: identifiers, operators, constants, and punctuation — the classic textbook token-numbering scheme (<id,1>, <op,1>, etc.).",

@@ -4,8 +4,15 @@ from flask_cors import CORS
 from compiler import compile_program, LexicalError, SyntaxError_, SemanticError_
 from error_analysis import run_error_analysis
 
-app = Flask(__name__)
-CORS(app)  # allows the frontend (opened as a file) to talk to this server
+# Serve the frontend folder directly, so this one Flask app is both the
+# API and the website -- one URL, one thing to deploy, no CORS headaches.
+app = Flask(__name__, static_folder="static", static_url_path="")
+CORS(app)  # harmless to keep even on a single origin; useful if you ever split them again
+
+
+@app.route("/")
+def home():
+    return app.send_static_file("index.html")
 
 
 @app.route("/api/ping", methods=["GET"])
