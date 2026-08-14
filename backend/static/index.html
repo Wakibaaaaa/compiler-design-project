@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compiler Design Project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- HOME SCREEN -->
+<!-- ============================================================ -->
+<section id="home-screen" class="screen active">
+  <div class="home-wrap">
+    <div class="eyebrow"><span class="prompt-char">&gt;</span> university project</div>
+    <h1 class="home-title">Compiler Design<br><span class="accent">Project</span></h1>
+    <p class="home-sub">A working compiler pipeline built from source text to target code — plus a live demonstration of panic-mode error recovery.</p>
+
+    <div class="option-grid">
+      <button class="option-card" id="btn-go-phases">
+        <div class="option-icon">⚙</div>
+        <div class="option-label">6 Phases of Compiler</div>
+        <div class="option-desc">Lexical → Syntax → Semantic → Intermediate Code → Optimization → Target Code</div>
+        <div class="option-cta">Open workspace →</div>
+      </button>
+
+      <button class="option-card" id="btn-go-errors">
+        <div class="option-icon">⚠</div>
+        <div class="option-label">Error Analysis<br>Panic Mode Recovery</div>
+        <div class="option-desc">Watch the parser detect multiple errors, recover, and keep going instead of stopping.</div>
+        <div class="option-cta">Open workspace →</div>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- 6 PHASES WORKSPACE -->
+<!-- ============================================================ -->
+<section id="phases-screen" class="screen">
+  <header class="workspace-header">
+    <button class="back-btn" data-target="home-screen">← Home</button>
+    <h2>6 Phases of Compiler</h2>
+    <span class="mode-tag">Compilation Mode</span>
+  </header>
+
+  <div class="workspace-body">
+    <div class="input-panel">
+      <div class="panel-label">Input Program</div>
+      <textarea id="phases-input" class="code-input" spellcheck="false" placeholder="x = a + b&#10;y = x * 10&#10;z = y + 5"></textarea>
+      <div class="panel-actions">
+        <button id="phases-run" class="btn-primary">▶ Run Compiler</button>
+        <button id="phases-clear" class="btn-secondary">Clear</button>
+        <button id="phases-example" class="btn-secondary">Load Example</button>
+      </div>
+      <div id="phases-status" class="status-line"></div>
+    </div>
+
+    <div id="phases-output" class="output-panel">
+      <div class="empty-state">Run a program to see the six phases appear here, one by one.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- ERROR ANALYSIS WORKSPACE -->
+<!-- ============================================================ -->
+<section id="errors-screen" class="screen">
+  <header class="workspace-header">
+    <button class="back-btn" data-target="home-screen">← Home</button>
+    <h2>Error Analysis — Panic Mode Recovery</h2>
+    <span class="mode-tag mode-tag-warn">Error Recovery Mode</span>
+  </header>
+
+  <div class="workspace-body">
+    <div class="input-panel">
+      <div class="panel-label">Input Program</div>
+      <textarea id="errors-input" class="code-input" spellcheck="false" placeholder="x = a +&#10;y = b * 10&#10;z = (a + b&#10;w = c + d"></textarea>
+      <div class="panel-actions">
+        <button id="errors-run" class="btn-primary">▶ Analyze Errors</button>
+        <button id="errors-clear" class="btn-secondary">Clear</button>
+        <button id="errors-example" class="btn-secondary">Load Example</button>
+      </div>
+      <div id="errors-status" class="status-line"></div>
+    </div>
+
+    <div id="errors-output" class="output-panel">
+      <div class="empty-state">Run a program with mistakes in it to watch panic-mode recovery in action.</div>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
