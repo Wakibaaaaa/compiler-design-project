@@ -520,7 +520,7 @@ class SixPhaseParser:
         idtok = self.consume()
         eqtok = self.consume()
         expr = self.parse_expr()
-        return Node(f"({eqtok[1]})", Node(idtok[2]), expr)
+        return Node(f"({eqtok[1]})", Node(idtok[1]), expr)
 
     def parse_expr(self):
         node = self.parse_term()
@@ -546,7 +546,7 @@ class SixPhaseParser:
             return node
         if tok[0] == 'NUM':
             return Node(tok[1])
-        return Node(tok[2])
+        return Node(tok[1])
 
 
 # ------------------------------------------------------------
@@ -710,6 +710,33 @@ def generate_target_code_textbook(optimized_code):
 
 
 # ------------------------------------------------------------
+# TYPE DECLARATION SUPPORT (new -- lets statements start with a C-style
+# type keyword like "int a = 10;" or be declaration-only like "int sum;")
+# ------------------------------------------------------------
+TYPE_KEYWORDS = {"int", "float", "double", "char", "long", "short", "bool", "void", "string"}
+
+
+def strip_type_keyword(stripped_line):
+    """
+    If a statement starts with a recognized type keyword (int, float, ...),
+    remove it and report that this was a declaration. The keyword is never
+    passed to the lexer, so it never pollutes the identifier table.
+    """
+    parts = stripped_line.split(None, 1)
+    if parts and parts[0] in TYPE_KEYWORDS:
+        rest = parts[1].strip() if len(parts) > 1 else ""
+        return rest, True
+    return stripped_line, False
+
+
+def strip_trailing_semicolon(text):
+    text = text.rstrip()
+    while text.endswith(";"):
+        text = text[:-1].rstrip()
+    return text
+
+
+# ------------------------------------------------------------
 # Small helper so syntax errors carry the same shape (.line/.col/.value)
 # that the rest of the project's SyntaxError_ handling expects
 # ------------------------------------------------------------
@@ -730,6 +757,12 @@ def compile_program(source):
     non-blank line of the submitted program, sharing symbol tables across
     all of them. Raises LexicalError / SyntaxError_ / SemanticError_ on the
     first problem found (same contract as before, used by app.py).
+
+    Supports an optional leading type keyword ("int a = 10;") and an
+    optional trailing ';' on any statement. A statement that is just a
+    type keyword plus a name ("int sum;") is treated as a declaration with
+    no expression to compile -- it registers the identifier and is shown
+    as its own lightweight entry, skipping phases 2-6.
     """
     reset_tables()
     lines = source.split("\n")
@@ -740,11 +773,13 @@ def compile_program(source):
     for line_no, line_text in enumerate(lines, start=1):
         if not line_text.strip():
             continue
-        bad_chars = find_bad_characters(line_text)
+        proc_text, _ = strip_type_keyword(line_text.strip())
+        proc_text = strip_trailing_semicolon(proc_text)
+        bad_chars = find_bad_characters(proc_text)
         if bad_chars:
             char, col = bad_chars[0]
             raise LexicalError(f"Unrecognized character '{char}'", line_no, col, char)
-        _, stream = lexical_analysis(line_text)
+        _, stream = lexical_analysis(proc_text)
         combined_stream.extend(stream)
 
     lexical_result = {
@@ -762,7 +797,22 @@ def compile_program(source):
         if not stripped:
             continue
 
-        tokens, _ = lexical_analysis(line_text)  # tables already built -> numbers match
+        proc_text, is_declaration = strip_type_keyword(stripped)
+        proc_text = strip_trailing_semicolon(proc_text)
+        tokens, _ = lexical_analysis(proc_text)  # tables already built -> numbers match
+
+        # Declaration-only statement: "int sum;" -> after stripping type
+        # keyword and semicolon, just a bare identifier with nothing else.
+        if is_declaration and len(tokens) == 1 and tokens[0][0] == 'ID':
+            statements.append({
+                "line_number": line_no,
+                "source_line": stripped,
+                "declaration_only": True,
+                "declared_identifier": tokens[0][1],
+                "note": f"Declares '{tokens[0][1]}' with no initial value. It is registered in the symbol table; there is no expression to run through phases 2-6.",
+            })
+            continue
+
         if len(tokens) < 3 or tokens[0][0] != 'ID' or tokens[1][1] != '=':
             raise SyntaxError_(
                 f"Expected 'identifier = expression' but got: '{stripped}'",
