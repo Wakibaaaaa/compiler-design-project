@@ -1,43 +1,24 @@
 """
 grammar_tools.py
-Part B of the toolkit: Leftmost Derivation (LMD), Rightmost Derivation (RMD),
-Parse Tree construction, and Ambiguity Detection for a user-typed grammar.
 
-This is a direct port of the user's own console tool (Part B of their
-combined script). The only real changes:
-  1. Functions that used to print() now RETURN plain data (dicts/strings),
-     since a Flask API needs to hand data to a browser, not a terminal.
-  2. The interactive "type lines until you enter 'end'" input loop is
-     replaced by parse_grammar_text(), which parses a grammar that was
-     typed into a <textarea> and submitted all at once.
-  3. Everything raises GrammarError with a clear message on bad input,
-     instead of silently printing "! ..." warnings to a console.
-
-Grammar format (typed by the user, one rule per line):
-    E -> E+E | a | b | c
-    S -> aA
-    A -> b | bB
-Use 'e' or 'epsilon' for an empty (epsilon) production.
-Symbols must be SINGLE characters (this matches the original console tool;
-FIRST/FOLLOW, in first_follow.py, is the one that supports multi-character
-symbols like E' or id).
+Adapted from the user's own "Part B" (LMD / RMD / Parse Tree / Ambiguity
+Detection) and "Part C" (FIRST & FOLLOW Set Computation) code. The
+algorithms are unchanged; every function that used to print() its output
+now RETURNS structured data instead, since a Flask API needs data, not
+console text.
 """
 
-MAX_DERIVATION_DEPTH = 25
-MAX_TREE_SEARCH_DEPTH = 20
+import re
+from collections import OrderedDict
 
 
-class GrammarError(Exception):
-    """Raised for anything wrong with the grammar or target string the user typed."""
-    pass
+# =============================================================================
+# PART B -- GRAMMAR (single-character symbols, used by LMD/RMD/Parse Tree/Ambiguity)
+# =============================================================================
 
-
-# ------------------------------------------------------------
-# GRAMMAR
-# ------------------------------------------------------------
 class Grammar:
     def __init__(self):
-        self.productions = {}       # head -> list of bodies (each body is a list of single-char symbols)
+        self.productions = {}
         self.start_symbol = None
         self.non_terminals = set()
         self.terminals = set()
@@ -67,69 +48,59 @@ class Grammar:
 
     def to_dict(self):
         return {
-            "rules": [
-                f"{head} -> " + " | ".join("".join(body) for body in self.productions[head])
-                for head in self.productions
-            ],
+            "productions": {
+                head: [''.join(body) for body in bodies]
+                for head, bodies in self.productions.items()
+            },
             "start_symbol": self.start_symbol,
             "non_terminals": sorted(self.non_terminals),
             "terminals": sorted(self.terminals),
         }
 
 
+class GrammarParseError(Exception):
+    """Raised when the grammar text the user typed can't be parsed."""
+    pass
+
+
 def parse_grammar_text(text):
     """
-    Parses grammar text typed by the user into a Grammar object.
-    Each non-blank line must look like: HEAD -> body1 | body2
-    Symbols are single characters; 'e' / 'epsilon' means the empty string.
-    Raises GrammarError with a message that points at the bad line.
+    Parses grammar rules written one-per-line as "HEAD -> body1 | body2",
+    using single-character symbols (as the original tool required), with
+    'e' or 'eps' meaning epsilon. Raises GrammarParseError with a helpful
+    message on bad input instead of silently producing an empty grammar.
     """
     grammar = Grammar()
-    any_line = False
-
-    for line_num, raw_line in enumerate(text.splitlines(), start=1):
+    line_num = 0
+    any_rule = False
+    for raw_line in text.split("\n"):
+        line_num += 1
         line = raw_line.strip()
         if not line:
             continue
-        any_line = True
         if '->' not in line:
-            raise GrammarError(f"Line {line_num}: missing '->'. Use format: HEAD -> body1 | body2")
+            raise GrammarParseError(f"Line {line_num}: expected format 'HEAD -> body1 | body2', got: '{line}'")
         head_part, body_part = line.split('->', 1)
         head = head_part.strip()
-        body_part = body_part.strip()
-        if not head:
-            raise GrammarError(f"Line {line_num}: no head (left-hand side) symbol found.")
-        if len(head) != 1:
-            raise GrammarError(
-                f"Line {line_num}: head symbol '{head}' must be a single character "
-                f"(this tool uses single-character grammar symbols)."
-            )
-        if not body_part:
-            raise GrammarError(f"Line {line_num}: '{head} ->' has no right-hand side.")
-
+        if not head or len(head) != 1:
+            raise GrammarParseError(f"Line {line_num}: head symbol must be a single character, got: '{head}'")
         body_list = []
         for prod in body_part.split('|'):
             prod = prod.strip()
-            if prod in ('e', 'epsilon'):
+            if prod in ('e', 'eps', 'epsilon', ''):
                 body_list.append(['e'])
             else:
-                if ' ' in prod:
-                    raise GrammarError(
-                        f"Line {line_num}: symbols must be single characters with no spaces "
-                        f"(got '{prod}')."
-                    )
                 body_list.append(list(prod))
         grammar.add_production(head, body_list)
-
-    if not any_line:
-        raise GrammarError("No grammar rules were entered.")
-
+        any_rule = True
+    if not any_rule:
+        raise GrammarParseError("No grammar rules were entered.")
     grammar.finalize()
     return grammar
 
 
 # ------------------------------------------------------------
-# PARSE TREE NODE
+# N-ARY ASCII TREE RENDERER (Part B's version -- any number of children)
 # ------------------------------------------------------------
 class TreeNode:
     def __init__(self, symbol):
@@ -140,34 +111,7 @@ class TreeNode:
         self.children.append(child)
 
 
-def trees_are_equal(t1, t2):
-    if t1 is None and t2 is None:
-        return True
-    if t1 is None or t2 is None:
-        return False
-    if t1.symbol != t2.symbol or len(t1.children) != len(t2.children):
-        return False
-    return all(trees_are_equal(a, b) for a, b in zip(t1.children, t2.children))
-
-
-def get_unique_trees(trees):
-    unique = []
-    for t in trees:
-        if not any(trees_are_equal(t, u) for u in unique):
-            unique.append(t)
-    return unique
-
-
-# ------------------------------------------------------------
-# ASCII PARSE TREE RENDERER (compact / | \ branches) -- unchanged logic,
-# now returns a string instead of printing
-# ------------------------------------------------------------
-def render_tree_ascii(node):
-    lines, _, _ = _render_tree(node)
-    return "\n".join(lines)
-
-
-def _render_tree(node):
+def render_tree(node):
     label = str(node.symbol)
     label_len = len(label)
 
@@ -176,7 +120,7 @@ def _render_tree(node):
 
     child_data = []
     for child in node.children:
-        c_lines, c_center, c_width = _render_tree(child)
+        c_lines, c_center, c_width = render_tree(child)
         child_data.append([c_lines, c_center, c_width])
 
     n = len(child_data)
@@ -249,11 +193,15 @@ def _render_tree(node):
     return result, parent_center, total_width
 
 
+def render_tree_ascii(node):
+    lines, _, _ = render_tree(node)
+    return "\n".join(lines)
+
+
 # ------------------------------------------------------------
-# DERIVATION SEARCH (brute-force, backtracking) -- unchanged logic
+# DERIVATIONS (unchanged algorithm)
 # ------------------------------------------------------------
-def leftmost_derive_all(grammar, target, max_depth=MAX_DERIVATION_DEPTH):
-    """Return list of (steps, rules) tuples for every successful LMD path found."""
+def leftmost_derive_all(grammar, target, max_depth=25):
     results = []
 
     def helper(current, steps, rules, depth):
@@ -289,8 +237,7 @@ def leftmost_derive_all(grammar, target, max_depth=MAX_DERIVATION_DEPTH):
     return results
 
 
-def rightmost_derive_all(grammar, target, max_depth=MAX_DERIVATION_DEPTH):
-    """Return list of (steps, rules) tuples for every successful RMD path found."""
+def rightmost_derive_all(grammar, target, max_depth=25):
     results = []
 
     def helper(current, steps, rules, depth):
@@ -358,16 +305,18 @@ def _expand_node(node, grammar, steps, step_ref, use_leftmost):
             return
 
 
-def build_all_parse_trees(grammar, target, max_depth=MAX_TREE_SEARCH_DEPTH):
-    """Exhaustively finds every structurally distinct parse tree for target."""
-
+# ------------------------------------------------------------
+# ALL PARSE TREES (unchanged algorithm)
+# ------------------------------------------------------------
+def build_all_parse_trees(grammar, target, max_depth=20):
     def try_derive(symbol, string, depth):
         if depth > max_depth:
             return []
         if grammar.is_terminal(symbol):
             if string == symbol:
                 return [TreeNode(symbol)]
-            return []
+            else:
+                return []
         trees = []
         if symbol not in grammar.productions:
             return []
@@ -388,59 +337,277 @@ def build_all_parse_trees(grammar, target, max_depth=MAX_TREE_SEARCH_DEPTH):
 
     def try_split(symbols, string, sym_idx, depth):
         if sym_idx == len(symbols):
-            return [[]] if string == '' else []
+            if string == '':
+                return [[]]
+            else:
+                return []
         if depth > max_depth:
             return []
         sym = symbols[sym_idx]
         results = []
-
         min_remaining = 0
         for k in range(sym_idx + 1, len(symbols)):
             s = symbols[k]
             if grammar.is_terminal(s):
                 min_remaining += len(s)
-
         min_len = 0 if grammar.is_non_terminal(sym) else len(sym)
         max_len = len(string) - min_remaining
-
         for split in range(min_len, max_len + 1):
             prefix = string[:split]
             suffix = string[split:]
-
             sub_trees = try_derive(sym, prefix, depth)
             if not sub_trees:
                 continue
-
             rest_splits = try_split(symbols, suffix, sym_idx + 1, depth)
             if not rest_splits:
                 continue
-
             for st in sub_trees:
                 for rs in rest_splits:
                     results.append([st] + rs)
-
         return results
 
     return try_derive(grammar.start_symbol, target, 0)
 
 
-# ------------------------------------------------------------
-# HIGH-LEVEL API FUNCTIONS (called directly by app.py)
-# ------------------------------------------------------------
-def _steps_to_list(steps, rules):
-    out = [{"step": 1, "string": steps[0], "rule": None}]
-    for i in range(1, len(steps)):
-        out.append({"step": i + 1, "string": steps[i], "rule": rules[i] if i < len(rules) else None})
-    return out
+def trees_are_equal(t1, t2):
+    if t1 is None and t2 is None:
+        return True
+    if t1 is None or t2 is None:
+        return False
+    if t1.symbol != t2.symbol or len(t1.children) != len(t2.children):
+        return False
+    return all(trees_are_equal(a, b) for a, b in zip(t1.children, t2.children))
 
 
-def run_derivation(grammar_text, target, mode="leftmost"):
-    """Part B, options [1] and [2]: LMD or RMD for a target string."""
+def get_unique_trees(trees):
+    unique = []
+    for t in trees:
+        if not any(trees_are_equal(t, u) for u in unique):
+            unique.append(t)
+    return unique
+
+
+# =============================================================================
+# PART C -- FIRST & FOLLOW (multi-character symbols)
+# =============================================================================
+
+class FirstFollowGrammar:
+    def __init__(self):
+        self.productions = OrderedDict()
+        self.non_terminals = []
+        self.eps = 'eps'
+
+    def is_non_terminal(self, sym):
+        return sym in self.productions
+
+    def add_production(self, lhs, rhs):
+        if lhs not in self.productions:
+            self.productions[lhs] = []
+            self.non_terminals.append(lhs)
+        self.productions[lhs].append(rhs)
+
+    def compute_first(self):
+        first = {nt: set() for nt in self.non_terminals}
+        changed = True
+        while changed:
+            changed = False
+            for lhs in self.non_terminals:
+                for prod in self.productions[lhs]:
+                    if prod == [self.eps]:
+                        if self.eps not in first[lhs]:
+                            first[lhs].add(self.eps)
+                            changed = True
+                        continue
+                    for sym in prod:
+                        if sym == self.eps:
+                            if self.eps not in first[lhs]:
+                                first[lhs].add(self.eps)
+                                changed = True
+                            break
+                        if not self.is_non_terminal(sym):
+                            if sym not in first[lhs]:
+                                first[lhs].add(sym)
+                                changed = True
+                            break
+                        else:
+                            before = len(first[lhs])
+                            first[lhs].update(first[sym] - {self.eps})
+                            if len(first[lhs]) != before:
+                                changed = True
+                            if self.eps not in first[sym]:
+                                break
+                    else:
+                        if self.eps not in first[lhs]:
+                            first[lhs].add(self.eps)
+                            changed = True
+        return first
+
+    def first_of_string(self, symbols, first):
+        res = set()
+        if not symbols:
+            res.add(self.eps)
+            return res
+        for sym in symbols:
+            if sym == self.eps:
+                res.add(self.eps)
+                break
+            if not self.is_non_terminal(sym):
+                res.add(sym)
+                break
+            res.update(first[sym] - {self.eps})
+            if self.eps not in first[sym]:
+                break
+        else:
+            res.add(self.eps)
+        return res
+
+    def compute_follow(self, first):
+        follow = {nt: set() for nt in self.non_terminals}
+        follow[self.non_terminals[0]].add('$')
+        changed = True
+        while changed:
+            changed = False
+            for lhs in self.non_terminals:
+                for prod in self.productions[lhs]:
+                    if prod == [self.eps]:
+                        continue
+                    for i, sym in enumerate(prod):
+                        if not self.is_non_terminal(sym):
+                            continue
+                        beta = prod[i + 1:]
+                        if beta:
+                            fb = self.first_of_string(beta, first)
+                            before = len(follow[sym])
+                            follow[sym].update(fb - {self.eps})
+                            if len(follow[sym]) != before:
+                                changed = True
+                            if self.eps in fb:
+                                before = len(follow[sym])
+                                follow[sym].update(follow[lhs])
+                                if len(follow[sym]) != before:
+                                    changed = True
+                        else:
+                            before = len(follow[sym])
+                            follow[sym].update(follow[lhs])
+                            if len(follow[sym]) != before:
+                                changed = True
+        return follow
+
+
+def ff_tokenize_no_space(s):
+    res = []
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c == "'":
+            if res:
+                res[-1] += "'"
+            i += 1
+        elif c.isupper():
+            tok = c
+            i += 1
+            while i < len(s) and s[i] in "'0123456789":
+                tok += s[i]
+                i += 1
+            res.append(tok)
+        elif c.islower():
+            j = i
+            while j < len(s) and s[j].islower():
+                j += 1
+            word = s[i:j]
+            if word in ('eps', 'epsilon', 'null') or word == '\u03b5':
+                res.append('eps')
+            elif word == 'id':
+                res.append('id')
+            else:
+                for ch in word:
+                    res.append(ch)
+            i = j
+        elif c == '\u03b5':
+            res.append('eps')
+            i += 1
+        elif c in ('|', '-', '>', '\u2192'):
+            i += 1
+        else:
+            res.append(c)
+            i += 1
+    return [t for t in res if t not in ('', '-', '>')]
+
+
+def ff_tokenize_rhs(rhs_str):
+    rhs_str = rhs_str.strip()
+    if not rhs_str:
+        return []
+    tokens = []
+    if ' ' in rhs_str:
+        for part in rhs_str.split():
+            tokens.extend(ff_tokenize_no_space(part))
+    else:
+        tokens.extend(ff_tokenize_no_space(rhs_str))
+    return tokens
+
+
+class FirstFollowParseError(Exception):
+    pass
+
+
+def parse_first_follow_grammar_text(text):
+    """
+    Parses "LHS -> RHS1 | RHS2" rules (multi-char symbols allowed) from a
+    block of text, one rule per line. Raises FirstFollowParseError with a
+    helpful message on malformed input.
+    """
+    g = FirstFollowGrammar()
+    lhs_order = []
+    raw_rules = []
+    line_num = 0
+    for raw_line in text.split("\n"):
+        line_num += 1
+        line = raw_line.strip()
+        if not line:
+            continue
+        if '->' not in line:
+            raise FirstFollowParseError(f"Line {line_num}: expected format 'LHS -> RHS1 | RHS2', got: '{line}'")
+        lhs_part, rhs_part = line.split('->', 1)
+        lhs_tokens = ff_tokenize_no_space(lhs_part.strip())
+        if not lhs_tokens:
+            raise FirstFollowParseError(f"Line {line_num}: missing left-hand side symbol.")
+        lhs = lhs_tokens[0]
+        raw_rules.append((lhs, rhs_part))
+        if lhs not in lhs_order:
+            lhs_order.append(lhs)
+
+    if not lhs_order:
+        raise FirstFollowParseError("No grammar rules were entered.")
+
+    for lhs in lhs_order:
+        if lhs not in g.productions:
+            g.productions[lhs] = []
+            g.non_terminals.append(lhs)
+
+    for lhs, rhs_part in raw_rules:
+        for alt in rhs_part.split('|'):
+            alt = alt.strip()
+            if not alt:
+                continue
+            toks = ff_tokenize_rhs(alt)
+            if not toks:
+                toks = ['eps']
+            g.productions[lhs].append(toks)
+
+    return g
+
+
+# =============================================================================
+# HIGH-LEVEL API FUNCTIONS (new -- these assemble the JSON responses)
+# =============================================================================
+
+def run_derivation(grammar_text, target, mode):
+    """mode: 'leftmost' or 'rightmost'"""
     grammar = parse_grammar_text(grammar_text)
-    target = target.strip()
-    if not target:
-        raise GrammarError("Please enter a target string to derive.")
-
     derive_fn = leftmost_derive_all if mode == "leftmost" else rightmost_derive_all
     all_results = derive_fn(grammar, target)
 
@@ -449,8 +616,7 @@ def run_derivation(grammar_text, target, mode="leftmost"):
             "success": False,
             "grammar": grammar.to_dict(),
             "target": target,
-            "mode": mode,
-            "message": f"The string '{target}' cannot be derived from this grammar.",
+            "message": f"String '{target}' cannot be derived from this grammar.",
         }
 
     steps, rules = all_results[0]
@@ -461,24 +627,16 @@ def run_derivation(grammar_text, target, mode="leftmost"):
         "grammar": grammar.to_dict(),
         "target": target,
         "mode": mode,
-        "derivation_steps": _steps_to_list(steps, rules),
-        "parse_tree_ascii": render_tree_ascii(tree),
+        "steps": steps,
+        "rules": rules[1:],  # first entry is always "" (the starting state)
+        "tree_ascii": render_tree_ascii(tree),
         "alternate_path_count": len(all_results),
-        "multiple_paths_note": (
-            f"{len(all_results)} different {'LMD' if mode == 'leftmost' else 'RMD'} paths exist "
-            f"for this string -- the grammar may be ambiguous (check with Ambiguity Detection)."
-            if len(all_results) > 1 else None
-        ),
+        "possibly_ambiguous": len(all_results) > 1,
     }
 
 
-def run_parse_tree(grammar_text, target):
-    """Part B, option [3]: build ALL distinct parse trees for target."""
+def run_parse_trees(grammar_text, target):
     grammar = parse_grammar_text(grammar_text)
-    target = target.strip()
-    if not target:
-        raise GrammarError("Please enter a target string.")
-
     all_trees = build_all_parse_trees(grammar, target)
     unique_trees = get_unique_trees(all_trees)
 
@@ -487,7 +645,7 @@ def run_parse_tree(grammar_text, target):
             "success": False,
             "grammar": grammar.to_dict(),
             "target": target,
-            "message": f"The string '{target}' cannot be derived from this grammar.",
+            "message": f"String '{target}' cannot be derived from this grammar.",
         }
 
     return {
@@ -500,13 +658,8 @@ def run_parse_tree(grammar_text, target):
     }
 
 
-def run_ambiguity(grammar_text, target):
-    """Part B, option [4]: full LMD-vs-RMD ambiguity analysis for target."""
+def run_ambiguity_check(grammar_text, target):
     grammar = parse_grammar_text(grammar_text)
-    target = target.strip()
-    if not target:
-        raise GrammarError("Please enter a target string.")
-
     lm_all = leftmost_derive_all(grammar, target)
     rm_all = rightmost_derive_all(grammar, target)
 
@@ -515,91 +668,85 @@ def run_ambiguity(grammar_text, target):
             "success": False,
             "grammar": grammar.to_dict(),
             "target": target,
-            "message": f"The string '{target}' cannot be derived from this grammar.",
+            "message": f"String '{target}' cannot be derived from this grammar.",
         }
 
     lm_trees_all = [build_tree_from_steps(grammar, s, True) for s, _ in lm_all]
     rm_trees_all = [build_tree_from_steps(grammar, s, False) for s, _ in rm_all]
 
-    def unique_indices(trees):
+    def unique_indices(trees_all):
         idxs, seen = [], []
-        for i, t in enumerate(trees):
+        for i, t in enumerate(trees_all):
             if not any(trees_are_equal(t, u) for u in seen):
                 seen.append(t)
                 idxs.append(i)
         return idxs
 
-    lm_unique_idx = unique_indices(lm_trees_all)
-    rm_unique_idx = unique_indices(rm_trees_all)
+    lm_idx = unique_indices(lm_trees_all)
+    rm_idx = unique_indices(rm_trees_all)
 
-    lm_entries = []
-    for count, i in enumerate(lm_unique_idx):
+    lmd_entries = []
+    for count, i in enumerate(lm_idx):
         steps, rules = lm_all[i]
-        lm_entries.append({
-            "label": f"LMD {count + 1}",
-            "derivation_steps": _steps_to_list(steps, rules),
-            "parse_tree_ascii": render_tree_ascii(lm_trees_all[i]),
+        lmd_entries.append({
+            "steps": steps,
+            "rules": rules[1:],
+            "tree_ascii": render_tree_ascii(lm_trees_all[i]),
         })
 
-    rm_entries = []
-    for count, i in enumerate(rm_unique_idx):
+    rmd_entries = []
+    for count, i in enumerate(rm_idx):
         steps, rules = rm_all[i]
-        rm_entries.append({
-            "label": f"RMD {count + 1}",
-            "derivation_steps": _steps_to_list(steps, rules),
-            "parse_tree_ascii": render_tree_ascii(rm_trees_all[i]),
+        rmd_entries.append({
+            "steps": steps,
+            "rules": rules[1:],
+            "tree_ascii": render_tree_ascii(rm_trees_all[i]),
         })
 
-    lm_trees = [lm_trees_all[i] for i in lm_unique_idx]
-    rm_trees = [rm_trees_all[i] for i in rm_unique_idx]
+    lm_trees = [lm_trees_all[i] for i in lm_idx]
+    rm_trees = [rm_trees_all[i] for i in rm_idx]
 
-    lmd_comparisons = []
-    for i in range(len(lm_trees)):
-        for j in range(i + 1, len(lm_trees)):
-            lmd_comparisons.append({
-                "a": f"LMD {i + 1}", "b": f"LMD {j + 1}",
-                "same": trees_are_equal(lm_trees[i], lm_trees[j]),
-            })
-
-    rmd_comparisons = []
-    for i in range(len(rm_trees)):
-        for j in range(i + 1, len(rm_trees)):
-            rmd_comparisons.append({
-                "a": f"RMD {i + 1}", "b": f"RMD {j + 1}",
-                "same": trees_are_equal(rm_trees[i], rm_trees[j]),
-            })
-
-    cross_comparisons = []
-    for i, lt in enumerate(lm_trees):
-        for j, rt in enumerate(rm_trees):
-            cross_comparisons.append({
-                "a": f"LMD {i + 1}", "b": f"RMD {j + 1}",
-                "same": trees_are_equal(lt, rt),
-            })
-
-    lmd_unique = len(lm_trees)
-    rmd_unique = len(rm_trees)
-    is_ambiguous = (lmd_unique > 1) or (rmd_unique > 1)
-
-    reasons = []
-    if lmd_unique > 1:
-        reasons.append(f"{lmd_unique} different LMD parse trees found.")
-    if rmd_unique > 1:
-        reasons.append(f"{rmd_unique} different RMD parse trees found.")
-    if not reasons:
-        reasons.append("Only one unique parse tree exists.")
+    is_ambiguous = (len(lm_trees) > 1) or (len(rm_trees) > 1)
 
     return {
         "success": True,
         "grammar": grammar.to_dict(),
         "target": target,
-        "lmd_entries": lm_entries,
-        "rmd_entries": rm_entries,
-        "lmd_unique_count": lmd_unique,
-        "rmd_unique_count": rmd_unique,
-        "lmd_comparisons": lmd_comparisons,
-        "rmd_comparisons": rmd_comparisons,
-        "cross_comparisons": cross_comparisons,
+        "lmd_entries": lmd_entries,
+        "rmd_entries": rmd_entries,
+        "unique_lmd_count": len(lm_trees),
+        "unique_rmd_count": len(rm_trees),
         "is_ambiguous": is_ambiguous,
-        "reasons": reasons,
+        "verdict": (
+            f"Grammar IS AMBIGUOUS for string '{target}' -- more than one distinct parse tree exists."
+            if is_ambiguous else
+            f"Grammar is NOT AMBIGUOUS for string '{target}' -- only one unique parse tree exists."
+        ),
     }
+
+
+def run_first_follow(grammar_text):
+    grammar = parse_first_follow_grammar_text(grammar_text)
+    first = grammar.compute_first()
+    follow = grammar.compute_follow(first)
+
+    return {
+        "success": True,
+        "non_terminals": grammar.non_terminals,
+        "productions": {
+            nt: [' '.join(p) for p in grammar.productions[nt]]
+            for nt in grammar.non_terminals
+        },
+        "first_sets": {nt: sorted(first[nt]) for nt in grammar.non_terminals},
+        "follow_sets": {nt: sorted(follow[nt]) for nt in grammar.non_terminals},
+    }
+
+
+if __name__ == "__main__":
+    import json
+    print("--- LMD test ---")
+    print(json.dumps(run_derivation("E -> E+E | a | b | c", "a+b", "leftmost"), indent=2))
+    print("--- Ambiguity test ---")
+    print(json.dumps(run_ambiguity_check("E -> E+E | a | b | c", "a+b+c")["is_ambiguous"]))
+    print("--- FIRST/FOLLOW test ---")
+    print(json.dumps(run_first_follow("E -> T E'\nE' -> + T E' | eps\nT -> F\nF -> ( E ) | id"), indent=2))

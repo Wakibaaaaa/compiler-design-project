@@ -1,173 +1,186 @@
 """
 error_analysis.py
-A real panic-mode error-recovery system built on top of the SAME grammar
-and lexer used in compiler.py (Part 1). This is NOT a simulation -- it is
-an actual recursive-descent parser that:
 
-  1. Detects lexical errors (bad characters) and keeps going.
-  2. Detects syntax errors (grammar violations) and performs REAL
-     panic-mode recovery: it discards tokens until it reaches a
-     synchronization point, then resumes parsing from there.
-  3. Runs semantic analysis (division-by-zero check) on whatever
-     statements DID parse successfully.
-  4. Never stops at the first error -- it keeps analyzing the whole
-     program and reports everything it found.
+Implements REAL panic-mode error recovery on top of the same lexer and
+grammar used in compiler.py. This is not a simulation -- it is an actual
+recursive-descent parser that:
+
+  1. Collects lexical errors instead of stopping at the first one.
+  2. On a syntax error, enters "panic mode": it discards tokens one by one
+     until it finds a synchronization token (end of statement: NEWLINE,
+     SEMI, or EOF), then resumes parsing from the next statement.
+  3. Runs semantic analysis (division-by-zero check) only on statements
+     that were parsed successfully.
+  4. Produces a structured report of every error and how it was recovered.
 
 Synchronization strategy used here:
-    On a syntax error, skip tokens until the next NEWLINE (end of
-    statement) or EOF. This is a natural choice for this grammar because
-    every statement is exactly one line, so "end of statement" is a
-    reliable, unambiguous place to resume parsing.
+  Because this grammar is "one statement per line" (identifier = expression),
+  the natural synchronization points are end-of-statement markers:
+  NEWLINE, ';' (SEMI), or end of file (EOF). When an error occurs, the
+  parser discards tokens until it sees one of these, then continues with
+  the next statement. This is the classic panic-mode strategy described in
+  the Dragon Book: skip tokens until a token from a "synchronizing set" is
+  found.
 """
 
 from compiler import (
-    tokenize, Parser, ASTNode, SyntaxError_,
-    analyze_semantics, SemanticError_,
+    tokenize, Token, LexicalError,
+    ASTNode, SyntaxError_, Parser,
+    SemanticError_, analyze_semantics,
 )
+
+SYNCHRONIZING_TYPES = {"NEWLINE", "SEMI", "EOF"}
 
 
 class PanicModeParser(Parser):
     """
-    Extends the normal Parser (Part 1) but NEVER lets a syntax error stop
-    the whole parse. Instead it records the error with full recovery
-    details and resynchronizes at the next statement boundary.
+    Extends the normal Parser but never stops at the first syntax error.
+    Instead, each time an error is encountered while parsing a statement,
+    it enters panic mode: skip tokens until a synchronizing token, then
+    keep going with the next statement.
     """
+
     def __init__(self, tokens):
         super().__init__(tokens)
-        self.syntax_errors = []  # list of recovery-detail dicts
+        self.errors = []          # list of structured error dicts
+        self.statements = []      # successfully-parsed AST statement nodes
 
-    def parse_program(self):
-        statements = []
-        self.skip_blank_lines()
-        while self.peek().type != "EOF":
-            try:
-                stmt = self.parse_statement()
-                statements.append(stmt)
-            except SyntaxError_ as e:
-                self._recover_from(e)
-            self.skip_blank_lines()
-        return ASTNode("Program", children=statements)
-
-    def _recover_from(self, error):
+    def synchronize(self, error_token):
         """
-        PANIC MODE RECOVERY:
-        1. The offending token is whatever self.peek() currently is
-           (the parser stopped right where the grammar broke).
-        2. We discard ("panic-skip") tokens one by one until we find a
-           synchronization token: NEWLINE (end of statement) or EOF.
-        3. We consume the synchronization token itself, so the main
-           parse_program loop resumes cleanly at the start of the next
-           statement.
+        Panic-mode recovery: discard tokens starting at the point of error
+        until a synchronizing token is found. Returns info about what was
+        skipped and where parsing resumes.
         """
-        bad_token = error.token
         skipped = []
-
-        while self.peek().type not in ("NEWLINE", "EOF"):
+        while self.peek().type not in SYNCHRONIZING_TYPES:
             skipped.append(self.advance())
 
         sync_token = self.peek()
-        if sync_token.type == "NEWLINE":
-            sync_description = "End of statement (newline)"
-            self.advance()  # consume the newline so we truly move past it
-        else:
-            sync_description = "End of file (EOF)"
+        if sync_token.type in ("NEWLINE", "SEMI"):
+            self.advance()  # consume the synchronizing token itself
 
-        resumed_line = self.peek().line if self.peek().type != "EOF" else None
+        # Addition: look past any further blank/NEWLINE tokens to report the
+        # line where the NEXT REAL statement actually begins, not just the
+        # next raw token (which is often just another NEWLINE).
+        peek_pos = self.pos
+        while peek_pos < len(self.tokens) and self.tokens[peek_pos].type == "NEWLINE":
+            peek_pos += 1
+        resume_line = self.tokens[peek_pos].line if peek_pos < len(self.tokens) else self.peek().line
 
-        readable_token = bad_token.value
-        if bad_token.type == "NEWLINE":
-            readable_token = "(end of line)"
-        elif bad_token.type == "EOF":
-            readable_token = "(end of file)"
+        return {
+            "skipped_tokens": [t.value for t in skipped if t.type != "NEWLINE"],
+            "synchronization_point": (
+                "End of statement (newline)" if sync_token.type == "NEWLINE" else
+                "Statement terminator ';'" if sync_token.type == "SEMI" else
+                "End of file"
+            ),
+            "resumed_at_line": resume_line,
+        }
 
-        self.syntax_errors.append({
-            "type": "Syntax Error",
-            "line": bad_token.line,
-            "column": bad_token.col,
-            "offending_token": readable_token,
-            "message": error.message,
-            "recovery_method": "Panic mode",
-            "skipped_tokens": [t.value for t in skipped],
-            "synchronization_point": sync_description,
-            "resumed_at_line": resumed_line,
-        })
+    def parse_program_with_recovery(self):
+        self.skip_blank_lines()
+        while self.peek().type != "EOF":
+            start_token = self.peek()
+            try:
+                stmt = self.parse_statement()
+                self.statements.append(stmt)
+            except SyntaxError_ as e:
+                recovery_info = self.synchronize(e.token)
+                token_display = e.token.value
+                if e.token.type == "NEWLINE":
+                    token_display = "<end of line>"
+                elif e.token.type == "EOF":
+                    token_display = "<end of file>"
+                self.errors.append({
+                    "type": "Syntax Error",
+                    "line": start_token.line,
+                    "column": e.token.col,
+                    "offending_token": token_display,
+                    "found_token": token_display,
+                    "expected_token": e.expected or "N/A",
+                    "message": e.message,
+                    "recovery": "Panic mode",
+                    **recovery_info,
+                })
+            self.skip_blank_lines()
+        return ASTNode("Program", children=self.statements)
 
 
 def run_error_analysis(source):
     """
-    Runs the full error-analysis pipeline and returns a structured result
-    matching the JSON shape the frontend expects.
+    Full pipeline: lexical -> syntax (panic-mode) -> semantic, collecting
+    every error along the way instead of stopping at the first one.
+    Returns a structured dict matching the project's required JSON shape.
     """
-    all_errors = []
+    errors = []
 
-    # --- Step 1: Lexical analysis (collects errors instead of stopping) ---
-    tokens, lexical_errors, symbol_table = tokenize(source, collect_errors=True)
-    for err in lexical_errors:
-        all_errors.append({
+    # Phase 1: Lexical analysis, collecting errors instead of raising
+    tokens, lex_errors, symbol_table = tokenize(source, collect_errors=True)
+    for e in lex_errors:
+        errors.append({
             "type": "Lexical Error",
-            "line": err.line,
-            "column": err.col,
-            "offending_token": err.char,
-            "message": err.message,
-            "recovery_method": "Skip invalid character and continue scanning",
-            "skipped_tokens": [err.char],
-            "synchronization_point": "Next character",
-            "resumed_at_line": err.line,
+            "line": e.line,
+            "column": e.col,
+            "offending_token": e.char,
+            "message": e.message,
+            "recovery": "Skipped invalid character",
         })
 
-    # --- Step 2: Syntax analysis WITH panic-mode recovery ---
+    # Phase 2: Syntax analysis with panic-mode recovery
     parser = PanicModeParser(tokens)
-    ast = parser.parse_program()
-    for err in parser.syntax_errors:
-        all_errors.append(err)
+    ast = parser.parse_program_with_recovery()
+    errors.extend(parser.errors)
 
-    # --- Step 3: Semantic analysis on whatever parsed successfully ---
-    semantic_info, semantic_errors = analyze_semantics(ast, collect_errors=True)
-    for err in semantic_errors:
-        all_errors.append({
+    # Phase 3: Semantic analysis, collecting errors, only on statements
+    # that successfully parsed
+    semantic_info, sem_errors = analyze_semantics(ast, collect_errors=True)
+    for e in sem_errors:
+        errors.append({
             "type": "Semantic Error",
-            "line": err.line,
-            "column": None,
-            "offending_token": None,
-            "message": err.message,
-            "recovery_method": "Reported, statement still counted",
-            "skipped_tokens": [],
-            "synchronization_point": None,
-            "resumed_at_line": None,
+            "line": e.line,
+            "message": e.message,
+            "recovery": "None (statement still counted, value may be undefined)",
         })
 
-    # --- Sort all errors by line number for a clean chronological report ---
-    all_errors.sort(key=lambda e: (e["line"] if e["line"] is not None else 0))
+    errors.sort(key=lambda e: e["line"])
+    for i, e in enumerate(errors, start=1):
+        e["error_number"] = i
 
-    # --- Number the errors and count by type ---
-    for i, err in enumerate(all_errors, start=1):
-        err["number"] = i
-
-    lexical_count = sum(1 for e in all_errors if e["type"] == "Lexical Error")
-    syntax_count = sum(1 for e in all_errors if e["type"] == "Syntax Error")
-    semantic_count = sum(1 for e in all_errors if e["type"] == "Semantic Error")
+    lexical_count = sum(1 for e in errors if e["type"] == "Lexical Error")
+    syntax_count = sum(1 for e in errors if e["type"] == "Syntax Error")
+    semantic_count = sum(1 for e in errors if e["type"] == "Semantic Error")
 
     summary = {
-        "total_errors": len(all_errors),
+        "total_errors": len(errors),
         "lexical_errors": lexical_count,
         "syntax_errors": syntax_count,
         "semantic_errors": semantic_count,
-        # Recovery is considered successful because the parser reached
-        # EOF and kept analyzing the whole program instead of aborting.
-        "recovery_successful": True,
-        "statements_successfully_parsed": len(ast.children),
+        "statements_successfully_parsed": len(parser.statements),
+        "recovery_successful": True if len(errors) > 0 else None,
     }
 
+    # Addition: list the source text of every statement that WAS parsed
+    # successfully, so the report can show "Valid Statements: line 2, line 4"
+    # the way a real compiler's error summary would.
+    source_lines = source.split("\n")
+    valid_statements = []
+    for stmt in parser.statements:
+        line_no = stmt.line
+        text = source_lines[line_no - 1].strip() if 0 < line_no <= len(source_lines) else ""
+        valid_statements.append({"line_number": line_no, "source_line": text})
+
     return {
-        "success": len(all_errors) == 0,
+        "success": len(errors) == 0,
         "source": source,
-        "errors": all_errors,
+        "errors": errors,
         "summary": summary,
+        "valid_statements": valid_statements,
+        "partial_semantic_analysis": semantic_info if parser.statements else None,
     }
 
 
 # ---------------------------------------------------------------------------
-# Quick manual test
+# Manual test
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import json

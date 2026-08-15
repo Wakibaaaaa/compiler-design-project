@@ -142,10 +142,11 @@ class ASTNode:
 
 
 class SyntaxError_(Exception):
-    def __init__(self, message, token):
+    def __init__(self, message, token, expected=None):
         super().__init__(message)
         self.message = message
         self.token = token
+        self.expected = expected  # human-readable description of what was expected, or None
 
 
 def describe_token(tok):
@@ -155,6 +156,19 @@ def describe_token(tok):
     if tok.type == "EOF":
         return "end of file"
     return f"'{tok.value}'"
+
+
+TOKEN_DISPLAY_NAMES = {
+    "RPAREN": "')'",
+    "LPAREN": "'('",
+    "ASSIGN": "'='",
+    "SEMI": "';'",
+    "ID": "an identifier",
+}
+
+
+def expected_display(type_):
+    return TOKEN_DISPLAY_NAMES.get(type_, type_)
 
 
 class Parser:
@@ -181,7 +195,8 @@ class Parser:
         tok = self.peek()
         if tok.type != type_:
             raise SyntaxError_(
-                f"Expected {type_} but found {describe_token(tok)}", tok
+                f"Expected {expected_display(type_)} but found {describe_token(tok)}", tok,
+                expected=expected_display(type_),
             )
         return self.advance()
 
@@ -210,7 +225,8 @@ class Parser:
         if self.peek().type not in ("NEWLINE", "EOF"):
             bad = self.peek()
             raise SyntaxError_(
-                f"Unexpected token {describe_token(bad)} after expression", bad
+                f"Unexpected token {describe_token(bad)} after expression", bad,
+                expected="end of statement",
             )
         return ASTNode("Assign", value=id_tok.value,
                         children=[ASTNode("Id", value=id_tok.value, line=id_tok.line), expr],
@@ -247,7 +263,8 @@ class Parser:
             return node
         else:
             raise SyntaxError_(
-                f"Expected identifier, number, or '(' but found {describe_token(tok)}", tok
+                f"Expected identifier, number, or '(' but found {describe_token(tok)}", tok,
+                expected="identifier, number, or '('",
             )
 
 
@@ -860,21 +877,22 @@ def compile_program(source):
         opt_code = optimize(tac_code)
         asm = generate_target_code_textbook(opt_code)
 
-        # Addition: for display purposes, show ';' as a real part of the
-        # tree -- a statement is grammatically "assignment ;", so it's drawn
-        # as a wrapper node above the assignment, using the same single-child
-        # rendering already used for inttofloat. This is ONLY for the ASCII
-        # display; the actual 3AC/optimization/target-code generation below
-        # still runs on the original (unwrapped) tree, since ';' carries no
-        # computational meaning.
-        display_syntax_tree = Node(";", left=syntax_tree) if had_semicolon else syntax_tree
-        display_semantic_tree = Node(";", left=semantic_tree) if had_semicolon else semantic_tree
+        # Addition: show ';' as trailing text right after the tree (matching
+        # where it actually appears in the source -- at the end of the
+        # statement) rather than as a structural parent above the root.
+        # The 3AC/optimization/target-code generation below still runs on
+        # the original tree, since ';' carries no computational meaning.
+        syntax_ascii = render_ascii_tree(syntax_tree)
+        semantic_ascii = render_ascii_tree(semantic_tree)
+        if had_semicolon:
+            syntax_ascii += "\n;"
+            semantic_ascii += "\n;"
 
         statements.append({
             "line_number": line_no,
             "source_line": stripped,
-            "syntax_tree_ascii": render_ascii_tree(display_syntax_tree),
-            "semantic_tree_ascii": render_ascii_tree(display_semantic_tree),
+            "syntax_tree_ascii": syntax_ascii,
+            "semantic_tree_ascii": semantic_ascii,
             "tac_steps": [{"description": desc, "line": ln} for desc, ln in steps],
             "tac_code": tac_code,
             "optimized_code": opt_code,

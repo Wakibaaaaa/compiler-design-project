@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cryptexa Compiler</title>
+<title>Compiler Design Project</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -15,7 +15,8 @@
 <!-- ============================================================ -->
 <section id="home-screen" class="screen active">
   <div class="home-wrap">
-    <h1 class="home-title">Cryptexa<br><span class="accent">Compiler</span></h1>
+    <div class="eyebrow"><span class="prompt-char">&gt;</span> university project</div>
+    <h1 class="home-title">Compiler Design<br><span class="accent">Project</span></h1>
     <p class="home-sub">A working compiler pipeline built from source text to target code — plus a live demonstration of panic-mode error recovery.</p>
 
     <div class="option-grid">
@@ -33,17 +34,17 @@
         <div class="option-cta">Open workspace →</div>
       </button>
 
-      <button class="option-card accent-purple" id="btn-go-grammar">
-        <div class="option-icon">⋔</div>
-        <div class="option-label">LMD / RMD / Parse Tree<br>Ambiguity Detection</div>
-        <div class="option-desc">Type your own grammar, derive a string leftmost or rightmost, build parse trees, and check for ambiguity.</div>
+      <button class="option-card" id="btn-go-grammar">
+        <div class="option-icon">🌳</div>
+        <div class="option-label">Grammar Analysis<br>LMD / RMD / Ambiguity</div>
+        <div class="option-desc">Enter any grammar and a target string: see leftmost/rightmost derivations, all parse trees, and whether the grammar is ambiguous.</div>
         <div class="option-cta">Open workspace →</div>
       </button>
 
-      <button class="option-card accent-green" id="btn-go-firstfollow">
+      <button class="option-card" id="btn-go-firstfollow">
         <div class="option-icon">∑</div>
         <div class="option-label">FIRST &amp; FOLLOW<br>Set Computation</div>
-        <div class="option-desc">Compute FIRST(X) and FOLLOW(A) for every non-terminal in a grammar you type in — the classic LL-parser prep step.</div>
+        <div class="option-desc">Compute FIRST(X) and FOLLOW(A) for every non-terminal in a grammar you enter — supports multi-character symbols like E' and id.</div>
         <div class="option-cta">Open workspace →</div>
       </button>
     </div>
@@ -95,9 +96,36 @@
       <div class="panel-actions">
         <button id="errors-run" class="btn-primary">▶ Analyze Errors</button>
         <button id="errors-clear" class="btn-secondary">Clear</button>
-        <button id="errors-example" class="btn-secondary">Load Example</button>
       </div>
+
+      <div class="panel-label" style="margin-top:14px;">Load Example</div>
+      <div class="example-btn-grid">
+        <button class="btn-secondary example-btn" data-example="missing-operand">1. Missing operand</button>
+        <button class="btn-secondary example-btn" data-example="missing-paren">2. Missing ')'</button>
+        <button class="btn-secondary example-btn" data-example="multiple">3. Multiple errors</button>
+        <button class="btn-secondary example-btn" data-example="followed-by-valid">4. Error + valid lines</button>
+      </div>
+
       <div id="errors-status" class="status-line"></div>
+
+      <div class="panic-mode-explainer">
+        <div class="panel-label" style="margin-top:0;">How Panic Mode Works</div>
+        <div class="panic-flow">
+          <div class="panic-step">ERROR DETECTED</div>
+          <div class="panic-arrow">↓</div>
+          <div class="panic-step">REPORT ERROR</div>
+          <div class="panic-arrow">↓</div>
+          <div class="panic-step">ENTER PANIC MODE</div>
+          <div class="panic-arrow">↓</div>
+          <div class="panic-step">SKIP INVALID TOKENS</div>
+          <div class="panic-arrow">↓</div>
+          <div class="panic-step">FIND SYNCHRONIZATION TOKEN</div>
+          <div class="panic-arrow">↓</div>
+          <div class="panic-step">RESUME PARSING</div>
+          <div class="panic-arrow">↓</div>
+          <div class="panic-step panic-step-final">CONTINUE WITH NEXT STATEMENT</div>
+        </div>
+      </div>
     </div>
 
     <div id="errors-output" class="output-panel">
@@ -112,13 +140,19 @@
 <section id="grammar-screen" class="screen">
   <header class="workspace-header">
     <button class="back-btn" data-target="home-screen">← Home</button>
-    <h2>LMD / RMD / Parse Tree / Ambiguity</h2>
-    <span class="mode-tag mode-tag-purple">Grammar Mode</span>
+    <h2>Grammar Analysis</h2>
+    <span class="mode-tag">Derivation Mode</span>
   </header>
 
   <div class="workspace-body">
     <div class="input-panel">
-      <div class="panel-label">Analysis Type</div>
+      <div class="panel-label">Grammar (single-character symbols, 'e' = epsilon)</div>
+      <textarea id="grammar-input" class="code-input" spellcheck="false" style="min-height:110px;" placeholder="E -> E+E | a | b | c"></textarea>
+
+      <div class="panel-label" style="margin-top:14px;">Target String</div>
+      <input id="grammar-target" class="text-input" type="text" placeholder="a+b+c" />
+
+      <div class="panel-label" style="margin-top:14px;">Analysis Type</div>
       <div class="segmented-control" id="grammar-mode-control">
         <button class="segment active" data-mode="leftmost">LMD</button>
         <button class="segment" data-mode="rightmost">RMD</button>
@@ -126,16 +160,8 @@
         <button class="segment" data-mode="ambiguity">Ambiguity</button>
       </div>
 
-      <div class="panel-label" style="margin-top:18px;">Grammar</div>
-      <textarea id="grammar-input" class="code-input grammar-textarea" spellcheck="false"
-        placeholder="E -> E+E | a | b | c"></textarea>
-      <div class="hint-line">One rule per line: <code>HEAD -&gt; body1 | body2</code>. Symbols are single characters. Use <code>e</code> for epsilon.</div>
-
-      <div class="panel-label" style="margin-top:14px;">Target String</div>
-      <input type="text" id="grammar-target" class="text-input" spellcheck="false" placeholder="a+b" />
-
       <div class="panel-actions">
-        <button id="grammar-run" class="btn-primary">▶ Run</button>
+        <button id="grammar-run" class="btn-primary">▶ Analyze</button>
         <button id="grammar-clear" class="btn-secondary">Clear</button>
         <button id="grammar-example" class="btn-secondary">Load Example</button>
       </div>
@@ -143,30 +169,28 @@
     </div>
 
     <div id="grammar-output" class="output-panel">
-      <div class="empty-state">Enter a grammar and a target string, choose an analysis type above, then hit Run.</div>
+      <div class="empty-state">Enter a grammar and a target string, choose an analysis type, then click Analyze.</div>
     </div>
   </div>
 </section>
 
 <!-- ============================================================ -->
-<!-- FIRST / FOLLOW WORKSPACE -->
+<!-- FIRST & FOLLOW WORKSPACE -->
 <!-- ============================================================ -->
 <section id="firstfollow-screen" class="screen">
   <header class="workspace-header">
     <button class="back-btn" data-target="home-screen">← Home</button>
     <h2>FIRST &amp; FOLLOW Set Computation</h2>
-    <span class="mode-tag mode-tag-green">LL-Parser Prep</span>
+    <span class="mode-tag">Set Computation Mode</span>
   </header>
 
   <div class="workspace-body">
     <div class="input-panel">
-      <div class="panel-label">Grammar</div>
-      <textarea id="ff-input" class="code-input grammar-textarea" spellcheck="false"
-        placeholder="E -> T E'&#10;E' -> + T E' | eps&#10;T -> F T'&#10;T' -> * F T' | eps&#10;F -> ( E ) | id"></textarea>
-      <div class="hint-line">One rule per line: <code>LHS -&gt; RHS1 | RHS2</code>. Non-terminals can be multi-character (e.g. <code>E'</code>, <code>T1</code>). Use <code>eps</code> for epsilon and <code>id</code> for an identifier terminal.</div>
+      <div class="panel-label">Grammar (multi-char symbols OK, e.g. E', T1, id; use 'eps' for epsilon)</div>
+      <textarea id="ff-input" class="code-input" spellcheck="false" style="min-height:220px;" placeholder="E -> T E'&#10;E' -> + T E' | eps&#10;T -> F&#10;F -> ( E ) | id"></textarea>
 
       <div class="panel-actions">
-        <button id="ff-run" class="btn-primary">▶ Compute FIRST / FOLLOW</button>
+        <button id="ff-run" class="btn-primary">▶ Compute FIRST/FOLLOW</button>
         <button id="ff-clear" class="btn-secondary">Clear</button>
         <button id="ff-example" class="btn-secondary">Load Example</button>
       </div>
@@ -174,7 +198,7 @@
     </div>
 
     <div id="ff-output" class="output-panel">
-      <div class="empty-state">Enter a grammar and click Compute to see FIRST(X) and FOLLOW(A) for every non-terminal.</div>
+      <div class="empty-state">Enter a grammar to compute FIRST and FOLLOW sets for every non-terminal.</div>
     </div>
   </div>
 </section>
