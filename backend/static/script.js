@@ -18,6 +18,12 @@ const PHASE_EXPLANATIONS = {
 const EXAMPLE_VALID = "position = initial + rate * 60";
 const EXAMPLE_ERRORS = "x = a +\ny = b * 10\nz = (a + b\nw = c + d";
 
+const EXAMPLE_GRAMMAR = "E -> E+E | a | b | c";
+const EXAMPLE_GRAMMAR_TARGET = "a+b+c";
+
+const EXAMPLE_FIRST_FOLLOW =
+  "E -> T E'\nE' -> + T E' | eps\nT -> F T'\nT' -> * F T' | eps\nF -> ( E ) | id";
+
 // ============================================================
 // NAVIGATION
 // ============================================================
@@ -29,6 +35,8 @@ function showScreen(id) {
 
 document.getElementById("btn-go-phases").addEventListener("click", () => showScreen("phases-screen"));
 document.getElementById("btn-go-errors").addEventListener("click", () => showScreen("errors-screen"));
+document.getElementById("btn-go-grammar").addEventListener("click", () => showScreen("grammar-screen"));
+document.getElementById("btn-go-firstfollow").addEventListener("click", () => showScreen("firstfollow-screen"));
 document.querySelectorAll(".back-btn").forEach(btn => {
   btn.addEventListener("click", () => showScreen(btn.dataset.target));
 });
@@ -271,10 +279,17 @@ function renderErrorAnalysisResult(data) {
 // API CALL WRAPPER
 // ============================================================
 async function callApi(endpoint, source) {
+  return callApiBody(endpoint, { source });
+}
+
+// Same idea as callApi, but takes a full JSON body instead of assuming a
+// single "source" field -- the grammar/first-follow endpoints need more
+// than one field (grammar text, target string, mode).
+async function callApiBody(endpoint, body) {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source }),
+    body: JSON.stringify(body),
   });
   const data = await response.json();
   return { ok: response.ok, status: response.status, data };
@@ -374,5 +389,287 @@ errorsRunBtn.addEventListener("click", async () => {
     errorsOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
   } finally {
     errorsRunBtn.disabled = false;
+  }
+});
+// ============================================================
+// GRAMMAR ANALYSIS RENDERING (LMD / RMD / Parse Tree / Ambiguity)
+// ============================================================
+function renderGrammarSummary(g) {
+  return `
+    <div class="grammar-summary">
+      <span><strong>Rules:</strong> ${g.rules.map(escapeHtml).join("  |  ")}</span>
+      <span><strong>Start:</strong> ${escapeHtml(g.start_symbol)}</span>
+      <span><strong>Non-terminals:</strong> ${g.non_terminals.map(escapeHtml).join(", ")}</span>
+      <span><strong>Terminals:</strong> ${g.terminals.map(escapeHtml).join(", ")}</span>
+    </div>`;
+}
+
+function renderDerivationSteps(steps) {
+  const rows = steps.map(s => `
+    <div class="step-row">
+      <span class="step-num">Step ${s.step}</span>
+      <span class="step-string">${escapeHtml(s.string)}</span>
+      <span class="step-rule">${s.rule ? "[" + escapeHtml(s.rule) + "]" : ""}</span>
+    </div>`).join("");
+  return `<div class="derivation-steps">${rows}</div>`;
+}
+
+function renderGrammarError(data) {
+  return `
+    <div class="error-card">
+      <div class="error-head">
+        <span class="error-type-badge">Grammar / Input Error</span>
+      </div>
+      <div class="error-body">
+        <div class="error-message">${escapeHtml(data.message)}</div>
+      </div>
+    </div>`;
+}
+
+function renderDerivationResult(data, modeLabel) {
+  let html = renderGrammarSummary(data.grammar);
+  html += phaseCard("→", `${modeLabel} of '${escapeHtml(data.target)}'`,
+    modeLabel === "LMD"
+      ? "Repeatedly expands the LEFTMOST non-terminal using a matching production until the target string is produced."
+      : "Repeatedly expands the RIGHTMOST non-terminal using a matching production until the target string is produced.",
+    `
+    <div class="subsection-label">Derivation Steps</div>
+    ${renderDerivationSteps(data.derivation_steps)}
+    <div class="subsection-label">Parse Tree</div>
+    <div class="tree-block">${escapeHtml(data.parse_tree_ascii)}</div>
+    ${data.multiple_paths_note ? `<p style="color: var(--accent-amber); font-size: 13px; margin-top: 14px;">⚠ ${escapeHtml(data.multiple_paths_note)}</p>` : ""}
+  `);
+  return html;
+}
+
+function renderParseTreeResult(data) {
+  let html = renderGrammarSummary(data.grammar);
+  html += `<div class="subsection-label" style="margin-top:18px;">Unique parse trees found: ${data.tree_count}</div>`;
+  data.trees_ascii.forEach((ascii, i) => {
+    html += phaseCard(i + 1, data.trees_ascii.length > 1 ? `Parse Tree ${i + 1} of ${data.trees_ascii.length}` : "Parse Tree",
+      "One structurally distinct way to derive the target string from the start symbol.",
+      `<div class="tree-block">${escapeHtml(ascii)}</div>`);
+  });
+  if (data.is_ambiguous) {
+    html += `<div class="verdict-banner verdict-ambiguous">⚠ Multiple distinct parse trees exist — this grammar is AMBIGUOUS for '${escapeHtml(data.target)}'.</div>`;
+  }
+  return html;
+}
+
+function renderDerivationEntries(entries) {
+  return entries.map((e, i) => `
+    <div class="phase-card">
+      <div class="phase-header">
+        <span class="phase-number">${i + 1}</span>
+        <span class="phase-title">${escapeHtml(e.label)}</span>
+      </div>
+      <div class="phase-content">
+        ${renderDerivationSteps(e.derivation_steps)}
+        <div class="subsection-label">Parse Tree</div>
+        <div class="tree-block">${escapeHtml(e.parse_tree_ascii)}</div>
+      </div>
+    </div>`).join("");
+}
+
+function renderComparisonTable(title, comparisons) {
+  if (!comparisons.length) return "";
+  const rows = comparisons.map(c => `
+    <tr>
+      <td>${escapeHtml(c.a)}</td>
+      <td>${escapeHtml(c.b)}</td>
+      <td class="${c.same ? "compare-same" : "compare-diff"}">${c.same ? "SAME" : "DIFFERENT"}</td>
+    </tr>`).join("");
+  return `
+    <div class="subsection-label">${escapeHtml(title)}</div>
+    <table class="compare-table">
+      <thead><tr><th>A</th><th>B</th><th>Result</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderAmbiguityResult(data) {
+  let html = renderGrammarSummary(data.grammar);
+
+  html += phaseCard("L", `Leftmost Derivations (${data.lmd_entries.length} unique)`,
+    "Every structurally distinct parse tree reachable by always expanding the leftmost non-terminal.",
+    renderDerivationEntries(data.lmd_entries));
+
+  html += phaseCard("R", `Rightmost Derivations (${data.rmd_entries.length} unique)`,
+    "Every structurally distinct parse tree reachable by always expanding the rightmost non-terminal.",
+    renderDerivationEntries(data.rmd_entries));
+
+  html += phaseCard("=", "Parse Tree Comparison",
+    "Compares every unique LMD tree against every unique RMD tree (and against each other) to check for structural duplicates.",
+    `
+    ${renderComparisonTable("LMD vs LMD", data.lmd_comparisons)}
+    ${renderComparisonTable("RMD vs RMD", data.rmd_comparisons)}
+    ${renderComparisonTable("LMD vs RMD", data.cross_comparisons)}
+  `);
+
+  html += `
+    <div class="verdict-banner ${data.is_ambiguous ? "verdict-ambiguous" : "verdict-unambiguous"}">
+      ${data.is_ambiguous ? "⚠ Grammar IS AMBIGUOUS" : "✓ Grammar is NOT AMBIGUOUS"} for '${escapeHtml(data.target)}'
+    </div>
+    <div class="notes-list">${data.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</div>
+  `;
+  return html;
+}
+
+// ============================================================
+// FIRST / FOLLOW RENDERING
+// ============================================================
+function renderFFSetList(sets, prefix) {
+  const rows = sets.map(s => `
+    <div class="ff-set-row">
+      <span class="ff-set-name">${prefix}(${escapeHtml(s.symbol)})</span>
+      <span class="ff-set-braces">=</span>
+      <span class="ff-set-braces">{</span>
+      <span class="ff-set-members">${s.set.map(m => `<span>${escapeHtml(m)}</span>`).join("")}</span>
+      <span class="ff-set-braces">}</span>
+    </div>`).join("");
+  return `<div class="ff-set-list">${rows}</div>`;
+}
+
+function renderFirstFollowResult(data) {
+  let html = renderGrammarSummary(data.grammar);
+  html += phaseCard(1, "FIRST Sets",
+    "FIRST(X) is the set of terminals that can appear as the first symbol of any string derived from X (plus 'eps' if X can derive the empty string).",
+    renderFFSetList(data.first_sets, "FIRST"));
+  html += phaseCard(2, "FOLLOW Sets",
+    "FOLLOW(A) is the set of terminals that can appear immediately after A in some derivation from the start symbol (plus '$' for the start symbol, marking end of input).",
+    renderFFSetList(data.follow_sets, "FOLLOW"));
+  return html;
+}
+
+// ============================================================
+// GRAMMAR WORKSPACE WIRING
+// ============================================================
+const grammarInput = document.getElementById("grammar-input");
+const grammarTarget = document.getElementById("grammar-target");
+const grammarOutput = document.getElementById("grammar-output");
+const grammarStatus = document.getElementById("grammar-status");
+const grammarRunBtn = document.getElementById("grammar-run");
+let grammarMode = "leftmost";
+
+document.querySelectorAll("#grammar-mode-control .segment").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#grammar-mode-control .segment").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    grammarMode = btn.dataset.mode;
+  });
+});
+
+document.getElementById("grammar-example").addEventListener("click", () => {
+  grammarInput.value = EXAMPLE_GRAMMAR;
+  grammarTarget.value = EXAMPLE_GRAMMAR_TARGET;
+});
+document.getElementById("grammar-clear").addEventListener("click", () => {
+  grammarInput.value = "";
+  grammarTarget.value = "";
+  grammarOutput.innerHTML = `<div class="empty-state">Enter a grammar and a target string, choose an analysis type above, then hit Run.</div>`;
+  grammarStatus.textContent = "";
+  grammarStatus.className = "status-line";
+});
+
+grammarRunBtn.addEventListener("click", async () => {
+  const grammar = grammarInput.value;
+  const target = grammarTarget.value;
+  if (!grammar.trim()) {
+    showToast("Please enter a grammar first");
+    return;
+  }
+  if (!target.trim()) {
+    showToast("Please enter a target string");
+    return;
+  }
+
+  const endpointMap = {
+    leftmost: "/api/grammar/derive",
+    rightmost: "/api/grammar/derive",
+    parsetree: "/api/grammar/parse-tree",
+    ambiguity: "/api/grammar/ambiguity",
+  };
+  const body = { grammar, target };
+  if (grammarMode === "leftmost" || grammarMode === "rightmost") body.mode = grammarMode;
+
+  grammarRunBtn.disabled = true;
+  grammarStatus.textContent = "Analyzing...";
+  grammarStatus.className = "status-line status-loading";
+
+  try {
+    const { data } = await callApiBody(endpointMap[grammarMode], body);
+    if (!data.success) {
+      grammarOutput.innerHTML = renderGrammarError(data);
+      grammarStatus.textContent = "✗ " + (data.message || "Could not complete analysis");
+      grammarStatus.className = "status-line status-error";
+      return;
+    }
+
+    if (grammarMode === "leftmost") {
+      grammarOutput.innerHTML = renderDerivationResult(data, "LMD");
+    } else if (grammarMode === "rightmost") {
+      grammarOutput.innerHTML = renderDerivationResult(data, "RMD");
+    } else if (grammarMode === "parsetree") {
+      grammarOutput.innerHTML = renderParseTreeResult(data);
+    } else if (grammarMode === "ambiguity") {
+      grammarOutput.innerHTML = renderAmbiguityResult(data);
+    }
+    grammarStatus.textContent = "✓ Analysis complete";
+    grammarStatus.className = "status-line status-success";
+  } catch (err) {
+    grammarStatus.textContent = "✗ Could not reach the backend. Is app.py running?";
+    grammarStatus.className = "status-line status-error";
+    grammarOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
+  } finally {
+    grammarRunBtn.disabled = false;
+  }
+});
+
+// ============================================================
+// FIRST / FOLLOW WORKSPACE WIRING
+// ============================================================
+const ffInput = document.getElementById("ff-input");
+const ffOutput = document.getElementById("ff-output");
+const ffStatus = document.getElementById("ff-status");
+const ffRunBtn = document.getElementById("ff-run");
+
+document.getElementById("ff-example").addEventListener("click", () => {
+  ffInput.value = EXAMPLE_FIRST_FOLLOW;
+});
+document.getElementById("ff-clear").addEventListener("click", () => {
+  ffInput.value = "";
+  ffOutput.innerHTML = `<div class="empty-state">Enter a grammar and click Compute to see FIRST(X) and FOLLOW(A) for every non-terminal.</div>`;
+  ffStatus.textContent = "";
+  ffStatus.className = "status-line";
+});
+
+ffRunBtn.addEventListener("click", async () => {
+  const grammar = ffInput.value;
+  if (!grammar.trim()) {
+    showToast("Please enter a grammar first");
+    return;
+  }
+
+  ffRunBtn.disabled = true;
+  ffStatus.textContent = "Computing...";
+  ffStatus.className = "status-line status-loading";
+
+  try {
+    const { data } = await callApiBody("/api/first-follow", { grammar });
+    if (!data.success) {
+      ffOutput.innerHTML = renderGrammarError(data);
+      ffStatus.textContent = "✗ " + (data.message || "Could not compute FIRST/FOLLOW");
+      ffStatus.className = "status-line status-error";
+      return;
+    }
+    ffOutput.innerHTML = renderFirstFollowResult(data);
+    ffStatus.textContent = "✓ FIRST and FOLLOW sets computed";
+    ffStatus.className = "status-line status-success";
+  } catch (err) {
+    ffStatus.textContent = "✗ Could not reach the backend. Is app.py running?";
+    ffStatus.className = "status-line status-error";
+    ffOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
+  } finally {
+    ffRunBtn.disabled = false;
   }
 });

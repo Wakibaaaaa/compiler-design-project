@@ -33,6 +33,20 @@
         <div class="option-desc">Watch the parser detect multiple errors, recover, and keep going instead of stopping.</div>
         <div class="option-cta">Open workspace →</div>
       </button>
+
+      <button class="option-card accent-purple" id="btn-go-grammar">
+        <div class="option-icon">⋔</div>
+        <div class="option-label">LMD / RMD / Parse Tree<br>Ambiguity Detection</div>
+        <div class="option-desc">Type your own grammar, derive a string leftmost or rightmost, build parse trees, and check for ambiguity.</div>
+        <div class="option-cta">Open workspace →</div>
+      </button>
+
+      <button class="option-card accent-green" id="btn-go-firstfollow">
+        <div class="option-icon">∑</div>
+        <div class="option-label">FIRST &amp; FOLLOW<br>Set Computation</div>
+        <div class="option-desc">Compute FIRST(X) and FOLLOW(A) for every non-terminal in a grammar you type in — the classic LL-parser prep step.</div>
+        <div class="option-cta">Open workspace →</div>
+      </button>
     </div>
   </div>
 </section>
@@ -89,6 +103,79 @@
 
     <div id="errors-output" class="output-panel">
       <div class="empty-state">Run a program with mistakes in it to watch panic-mode recovery in action.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- GRAMMAR ANALYSIS WORKSPACE (LMD / RMD / Parse Tree / Ambiguity) -->
+<!-- ============================================================ -->
+<section id="grammar-screen" class="screen">
+  <header class="workspace-header">
+    <button class="back-btn" data-target="home-screen">← Home</button>
+    <h2>LMD / RMD / Parse Tree / Ambiguity</h2>
+    <span class="mode-tag mode-tag-purple">Grammar Mode</span>
+  </header>
+
+  <div class="workspace-body">
+    <div class="input-panel">
+      <div class="panel-label">Analysis Type</div>
+      <div class="segmented-control" id="grammar-mode-control">
+        <button class="segment active" data-mode="leftmost">LMD</button>
+        <button class="segment" data-mode="rightmost">RMD</button>
+        <button class="segment" data-mode="parsetree">Parse Tree</button>
+        <button class="segment" data-mode="ambiguity">Ambiguity</button>
+      </div>
+
+      <div class="panel-label" style="margin-top:18px;">Grammar</div>
+      <textarea id="grammar-input" class="code-input grammar-textarea" spellcheck="false"
+        placeholder="E -> E+E | a | b | c"></textarea>
+      <div class="hint-line">One rule per line: <code>HEAD -&gt; body1 | body2</code>. Symbols are single characters. Use <code>e</code> for epsilon.</div>
+
+      <div class="panel-label" style="margin-top:14px;">Target String</div>
+      <input type="text" id="grammar-target" class="text-input" spellcheck="false" placeholder="a+b" />
+
+      <div class="panel-actions">
+        <button id="grammar-run" class="btn-primary">▶ Run</button>
+        <button id="grammar-clear" class="btn-secondary">Clear</button>
+        <button id="grammar-example" class="btn-secondary">Load Example</button>
+      </div>
+      <div id="grammar-status" class="status-line"></div>
+    </div>
+
+    <div id="grammar-output" class="output-panel">
+      <div class="empty-state">Enter a grammar and a target string, choose an analysis type above, then hit Run.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- FIRST / FOLLOW WORKSPACE -->
+<!-- ============================================================ -->
+<section id="firstfollow-screen" class="screen">
+  <header class="workspace-header">
+    <button class="back-btn" data-target="home-screen">← Home</button>
+    <h2>FIRST &amp; FOLLOW Set Computation</h2>
+    <span class="mode-tag mode-tag-green">LL-Parser Prep</span>
+  </header>
+
+  <div class="workspace-body">
+    <div class="input-panel">
+      <div class="panel-label">Grammar</div>
+      <textarea id="ff-input" class="code-input grammar-textarea" spellcheck="false"
+        placeholder="E -> T E'&#10;E' -> + T E' | eps&#10;T -> F T'&#10;T' -> * F T' | eps&#10;F -> ( E ) | id"></textarea>
+      <div class="hint-line">One rule per line: <code>LHS -&gt; RHS1 | RHS2</code>. Non-terminals can be multi-character (e.g. <code>E'</code>, <code>T1</code>). Use <code>eps</code> for epsilon and <code>id</code> for an identifier terminal.</div>
+
+      <div class="panel-actions">
+        <button id="ff-run" class="btn-primary">▶ Compute FIRST / FOLLOW</button>
+        <button id="ff-clear" class="btn-secondary">Clear</button>
+        <button id="ff-example" class="btn-secondary">Load Example</button>
+      </div>
+      <div id="ff-status" class="status-line"></div>
+    </div>
+
+    <div id="ff-output" class="output-panel">
+      <div class="empty-state">Enter a grammar and click Compute to see FIRST(X) and FOLLOW(A) for every non-terminal.</div>
     </div>
   </div>
 </section>

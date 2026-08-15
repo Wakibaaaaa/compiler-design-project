@@ -168,6 +168,14 @@ button {
 }
 .option-card:nth-child(2) .option-cta { color: var(--accent-amber); }
 
+.option-card.accent-purple:hover { border-color: var(--accent-purple); }
+.option-card.accent-purple .option-icon,
+.option-card.accent-purple .option-cta { color: var(--accent-purple); }
+
+.option-card.accent-green:hover { border-color: var(--accent-green); }
+.option-card.accent-green .option-icon,
+.option-card.accent-green .option-cta { color: var(--accent-green); }
+
 /* ============================================================
    WORKSPACE (SHARED)
    ============================================================ */
@@ -211,6 +219,14 @@ button {
 .mode-tag-warn {
   background: rgba(227, 179, 65, 0.12);
   color: var(--accent-amber);
+}
+.mode-tag-purple {
+  background: rgba(194, 151, 255, 0.12);
+  color: var(--accent-purple);
+}
+.mode-tag-green {
+  background: rgba(63, 217, 127, 0.12);
+  color: var(--accent-green);
 }
 
 .workspace-body {
@@ -290,6 +306,63 @@ button {
   color: var(--text-secondary);
 }
 .btn-secondary:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+
+/* ============================================================
+   SEGMENTED CONTROL (Grammar workspace mode switch)
+   ============================================================ */
+.segmented-control {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.segment {
+  flex: 1;
+  background: var(--bg-input);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 9px 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.segment:last-child { border-right: none; }
+.segment:hover { color: var(--text-primary); }
+.segment.active {
+  background: var(--accent-purple);
+  color: #1a0d29;
+}
+
+/* ============================================================
+   TEXT INPUT (single-line, e.g. target string)
+   ============================================================ */
+.text-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  padding: 10px 14px;
+  outline: none;
+}
+.text-input:focus { border-color: var(--accent-purple); }
+.text-input::placeholder { color: var(--text-muted); }
+
+.grammar-textarea { min-height: 130px; flex: none; }
+
+.hint-line {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-top: 8px;
+}
+.hint-line code {
+  font-size: 11px;
+  padding: 1px 5px;
+}
 
 .status-line {
   margin-top: 12px;
@@ -475,6 +548,111 @@ code {
   font-size: 0.92em;
   color: var(--accent-blue);
 }
+
+/* ============================================================
+   GRAMMAR ANALYSIS OUTPUT (LMD / RMD / Parse Tree / Ambiguity)
+   ============================================================ */
+.grammar-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.grammar-summary strong { color: var(--text-primary); }
+
+.derivation-steps {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+.derivation-steps .step-row {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.derivation-steps .step-row:last-child { border-bottom: none; }
+.derivation-steps .step-num {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 52px;
+}
+.derivation-steps .step-string { color: var(--accent-blue); flex-shrink: 0; }
+.derivation-steps .step-rule { color: var(--text-muted); }
+
+.verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  margin: 20px 0;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.verdict-ambiguous {
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  color: var(--accent-red);
+}
+.verdict-unambiguous {
+  background: rgba(63, 217, 127, 0.1);
+  border: 1px solid rgba(63, 217, 127, 0.3);
+  color: var(--accent-green);
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.compare-table th, .compare-table td {
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  text-align: left;
+}
+.compare-table th {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.compare-same { color: var(--accent-green); font-weight: 600; }
+.compare-diff { color: var(--accent-red); font-weight: 600; }
+
+.tree-block {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.ff-set-list { display: flex; flex-direction: column; gap: 2px; }
+.ff-set-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ff-set-row:last-child { border-bottom: none; }
+.ff-set-name { color: var(--accent-blue); flex-shrink: 0; min-width: 90px; }
+.ff-set-braces { color: var(--text-muted); }
+.ff-set-members span { color: var(--accent-green); }
+.ff-set-members span:not(:last-child)::after { content: ", "; color: var(--text-muted); }
 
 /* ============================================================
    ERROR ANALYSIS OUTPUT
