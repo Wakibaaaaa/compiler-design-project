@@ -730,10 +730,13 @@ def strip_type_keyword(stripped_line):
 
 
 def strip_trailing_semicolon(text):
+    """Returns (text_without_semicolon, had_semicolon)."""
     text = text.rstrip()
+    had = False
     while text.endswith(";"):
         text = text[:-1].rstrip()
-    return text
+        had = True
+    return text, had
 
 
 # ------------------------------------------------------------
@@ -797,7 +800,7 @@ def compile_program(source):
             continue
 
         proc_text, is_declaration = strip_type_keyword(stripped)
-        proc_text = strip_trailing_semicolon(proc_text)
+        proc_text, had_semicolon = strip_trailing_semicolon(proc_text)
         tokens, _ = lexical_analysis(proc_text)  # tables already built -> numbers match
 
         # Declaration-only statement: "int sum;" -> after stripping type
@@ -857,11 +860,21 @@ def compile_program(source):
         opt_code = optimize(tac_code)
         asm = generate_target_code_textbook(opt_code)
 
+        # Addition: for display purposes, show ';' as a real part of the
+        # tree -- a statement is grammatically "assignment ;", so it's drawn
+        # as a wrapper node above the assignment, using the same single-child
+        # rendering already used for inttofloat. This is ONLY for the ASCII
+        # display; the actual 3AC/optimization/target-code generation below
+        # still runs on the original (unwrapped) tree, since ';' carries no
+        # computational meaning.
+        display_syntax_tree = Node(";", left=syntax_tree) if had_semicolon else syntax_tree
+        display_semantic_tree = Node(";", left=semantic_tree) if had_semicolon else semantic_tree
+
         statements.append({
             "line_number": line_no,
             "source_line": stripped,
-            "syntax_tree_ascii": render_ascii_tree(syntax_tree),
-            "semantic_tree_ascii": render_ascii_tree(semantic_tree),
+            "syntax_tree_ascii": render_ascii_tree(display_syntax_tree),
+            "semantic_tree_ascii": render_ascii_tree(display_semantic_tree),
             "tac_steps": [{"description": desc, "line": ln} for desc, ln in steps],
             "tac_code": tac_code,
             "optimized_code": opt_code,
