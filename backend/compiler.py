@@ -376,8 +376,8 @@ def reset_tables():
 TOKEN_REGEX = r'''
     (?P<NUM>\d+\.?\d*) |
     (?P<ID>[a-zA-Z_][a-zA-Z0-9_]*) |
-    (?P<OP>==|!=|<=|>=|[+\-*/=<>]) |
-    (?P<PUNCT>[;(),{}]) |
+    (?P<OP>==|!=|<=|>=|[+\-*/=<>;]) |
+    (?P<PUNCT>[(),{}]) |
     (?P<SKIP>\s+) |
     (?P<BAD>.)
 '''
@@ -774,7 +774,6 @@ def compile_program(source):
         if not line_text.strip():
             continue
         proc_text, _ = strip_type_keyword(line_text.strip())
-        proc_text = strip_trailing_semicolon(proc_text)
         bad_chars = find_bad_characters(proc_text)
         if bad_chars:
             char, col = bad_chars[0]
