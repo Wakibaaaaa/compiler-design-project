@@ -434,12 +434,15 @@ errorsRunBtn.addEventListener("click", async () => {
 // GRAMMAR ANALYSIS RENDERING (LMD / RMD / Parse Tree / Ambiguity)
 // ============================================================
 function renderGrammarSummary(g) {
+  const rules = g.rules || [];
+  const nonTerminals = g.non_terminals || [];
+  const terminals = g.terminals || [];
   return `
     <div class="grammar-summary">
-      <span><strong>Rules:</strong> ${g.rules.map(escapeHtml).join("  |  ")}</span>
+      <span><strong>Rules:</strong> ${rules.map(escapeHtml).join("  |  ")}</span>
       <span><strong>Start:</strong> ${escapeHtml(g.start_symbol)}</span>
-      <span><strong>Non-terminals:</strong> ${g.non_terminals.map(escapeHtml).join(", ")}</span>
-      <span><strong>Terminals:</strong> ${g.terminals.map(escapeHtml).join(", ")}</span>
+      <span><strong>Non-terminals:</strong> ${nonTerminals.map(escapeHtml).join(", ")}</span>
+      <span><strong>Terminals:</strong> ${terminals.map(escapeHtml).join(", ")}</span>
     </div>`;
 }
 

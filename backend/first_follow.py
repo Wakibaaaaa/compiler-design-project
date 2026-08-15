@@ -139,6 +139,20 @@ class FirstFollowGrammar:
         return follow
 
     def to_dict(self):
+        # Collect all terminal symbols actually used on the right-hand
+        # side of any production (i.e. every symbol that is NOT a
+        # non-terminal and isn't the epsilon marker).
+        terminals = []
+        seen = set()
+        for lhs in self.non_terminals:
+            for prod in self.productions[lhs]:
+                for sym in prod:
+                    if sym == self.eps or self.is_non_terminal(sym):
+                        continue
+                    if sym not in seen:
+                        seen.add(sym)
+                        terminals.append(sym)
+
         return {
             "rules": [
                 f"{lhs} -> " + " | ".join(" ".join(p) for p in self.productions[lhs])
@@ -146,6 +160,7 @@ class FirstFollowGrammar:
             ],
             "start_symbol": self.non_terminals[0] if self.non_terminals else None,
             "non_terminals": list(self.non_terminals),
+            "terminals": terminals,
         }
 
 
