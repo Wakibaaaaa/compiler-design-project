@@ -294,12 +294,43 @@ async function callApi(endpoint, source) {
 // single "source" field -- the grammar/first-follow endpoints need more
 // than one field (grammar text, target string, mode).
 async function callApiBody(endpoint, body) {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json();
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (networkErr) {
+    // fetch() itself only throws for true network-level failures: DNS
+    // failure, no connection, CORS block, offline, etc.
+    throw new Error(`Network error — the request never reached the server (${networkErr.message}).`);
+  }
+
+  if (!response.ok) {
+    // Server responded, but with a non-2xx status. Try to read a JSON
+    // error body; if the server sent back an HTML error page instead
+    // (e.g. a 502/504 from Render, or an unhandled exception producing
+    // Flask's default error page), fall back to the status text so the
+    // user still sees something meaningful instead of a JSON parse crash.
+    let detail = "";
+    try {
+      const errJson = await response.json();
+      detail = errJson.message || errJson.error?.message || JSON.stringify(errJson);
+    } catch {
+      detail = await response.text().catch(() => "");
+      detail = detail && detail.length < 200 ? detail : `HTTP ${response.status} ${response.statusText}`;
+    }
+    throw new Error(`Server returned an error (HTTP ${response.status}): ${detail}`);
+  }
+
+  let data;
+  try {
+    data = await response.json();
+  } catch (parseErr) {
+    throw new Error(`Server responded but didn't send valid JSON (${parseErr.message}). It may still be starting up — try again in a few seconds.`);
+  }
+
   return { ok: response.ok, status: response.status, data };
 }
 
@@ -344,9 +375,9 @@ phasesRunBtn.addEventListener("click", async () => {
       phasesStatus.className = "status-line status-error";
     }
   } catch (err) {
-    phasesStatus.textContent = "✗ Could not reach the backend. Is app.py running?";
+    phasesStatus.textContent = "✗ " + err.message;
     phasesStatus.className = "status-line status-error";
-    phasesOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
+    phasesOutput.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
   } finally {
     phasesRunBtn.disabled = false;
   }
@@ -392,9 +423,9 @@ errorsRunBtn.addEventListener("click", async () => {
       errorsStatus.className = "status-line status-error";
     }
   } catch (err) {
-    errorsStatus.textContent = "✗ Could not reach the backend. Is app.py running?";
+    errorsStatus.textContent = "✗ " + err.message;
     errorsStatus.className = "status-line status-error";
-    errorsOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
+    errorsOutput.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
   } finally {
     errorsRunBtn.disabled = false;
   }
@@ -625,9 +656,9 @@ grammarRunBtn.addEventListener("click", async () => {
     grammarStatus.textContent = "✓ Analysis complete";
     grammarStatus.className = "status-line status-success";
   } catch (err) {
-    grammarStatus.textContent = "✗ Could not reach the backend. Is app.py running?";
+    grammarStatus.textContent = "✗ " + err.message;
     grammarStatus.className = "status-line status-error";
-    grammarOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
+    grammarOutput.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
   } finally {
     grammarRunBtn.disabled = false;
   }
@@ -674,9 +705,9 @@ ffRunBtn.addEventListener("click", async () => {
     ffStatus.textContent = "✓ FIRST and FOLLOW sets computed";
     ffStatus.className = "status-line status-success";
   } catch (err) {
-    ffStatus.textContent = "✗ Could not reach the backend. Is app.py running?";
+    ffStatus.textContent = "✗ " + err.message;
     ffStatus.className = "status-line status-error";
-    ffOutput.innerHTML = `<div class="empty-state">Could not connect to http://127.0.0.1:5000. Make sure the Flask server is running (python app.py).</div>`;
+    ffOutput.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
   } finally {
     ffRunBtn.disabled = false;
   }
