@@ -134,19 +134,6 @@ function renderCompileResult(data) {
   // Phases 2-6 -- shown once per statement, since each assignment produces
   // its own tree, 3AC sequence, and target code
   data.statements.forEach((stmt, i) => {
-    if (stmt.declaration_only) {
-      html += `
-        <div class="phase-card">
-          <div class="phase-header">
-            <span class="phase-number">·</span>
-            <span class="phase-title">Statement ${i + 1}: <code>${escapeHtml(stmt.source_line)}</code> (line ${stmt.line_number}) — Declaration</span>
-          </div>
-          <div class="phase-content">
-            <p style="color: var(--text-secondary); font-size: 13.5px; margin: 0;">${escapeHtml(stmt.note)}</p>
-          </div>
-        </div>`;
-      return;
-    }
     const tag = `<div class="subsection-label" style="margin-top:0;">Statement ${i + 1}: <code>${escapeHtml(stmt.source_line)}</code> (line ${stmt.line_number})</div>`;
 
     html += phaseCard(2, `Syntax Analysis`, PHASE_EXPLANATIONS.syntax, `
