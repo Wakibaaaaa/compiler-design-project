@@ -35,6 +35,7 @@ html, body {
   color: var(--text-primary);
   font-family: var(--font-display);
   min-height: 100vh;
+  scroll-behavior: auto;
 }
 
 button {
@@ -56,7 +57,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 24px;
+  padding: 24px 24px;
   background:
     radial-gradient(circle at 20% 20%, rgba(94, 177, 255, 0.07), transparent 45%),
     radial-gradient(circle at 80% 70%, rgba(195, 151, 255, 0.06), transparent 45%),
@@ -64,18 +65,18 @@ button {
 }
 
 .home-wrap {
-  max-width: 760px;
+  max-width: 720px;
   width: 100%;
   text-align: center;
 }
 
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--accent-green);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .prompt-char {
@@ -88,11 +89,11 @@ button {
 }
 
 .home-title {
-  font-size: clamp(36px, 6vw, 56px);
+  font-size: clamp(26px, 4.4vw, 40px);
   line-height: 1.08;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin: 0 0 20px;
+  margin: 0 0 10px;
 }
 .home-title .accent {
   background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
@@ -103,16 +104,16 @@ button {
 
 .home-sub {
   color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.6;
-  max-width: 540px;
-  margin: 0 auto 44px;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 520px;
+  margin: 0 auto 22px;
 }
 
 .option-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 12px;
 }
 @media (max-width: 720px) {
   .option-grid { grid-template-columns: 1fr; }
@@ -122,7 +123,7 @@ button {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 32px 24px;
+  padding: 16px 16px;
   text-align: left;
   color: var(--text-primary);
   transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
@@ -141,29 +142,30 @@ button {
 }
 
 .option-icon {
-  font-size: 28px;
-  margin-bottom: 14px;
+  font-size: 18px;
+  margin-bottom: 6px;
   color: var(--accent-blue);
+  line-height: 1;
 }
 .option-card:nth-child(2) .option-icon { color: var(--accent-amber); }
 
 .option-label {
-  font-size: 19px;
+  font-size: 14.5px;
   font-weight: 600;
-  margin-bottom: 10px;
-  line-height: 1.3;
+  margin-bottom: 4px;
+  line-height: 1.25;
 }
 
 .option-desc {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-secondary);
-  line-height: 1.55;
-  margin-bottom: 18px;
+  line-height: 1.4;
+  margin-bottom: 8px;
 }
 
 .option-cta {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 11.5px;
   color: var(--accent-blue);
 }
 .option-card:nth-child(2) .option-cta { color: var(--accent-amber); }

@@ -30,7 +30,15 @@ const EXAMPLE_FIRST_FOLLOW =
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
-  window.scrollTo(0, 0);
+  // Force an instant jump to the very top of the new screen, run on the
+  // next frame so it happens *after* the browser has laid out the newly
+  // shown section (fixes the "still scrolled down" issue when the home
+  // screen was scrolled before clicking a card).
+  requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  });
 }
 
 document.getElementById("btn-go-phases").addEventListener("click", () => showScreen("phases-screen"));
